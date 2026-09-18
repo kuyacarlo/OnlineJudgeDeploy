@@ -1,1 +1,5 @@
 data/
+*.orig
+*.log
+__pycache__/
+*.pyc

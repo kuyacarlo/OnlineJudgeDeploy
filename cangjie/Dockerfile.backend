@@ -1,0 +1,10 @@
+# Custom backend image = stock QDU backend + Cangjie entry in judge/languages.py
+FROM registry.cn-hongkong.aliyuncs.com/oj-image/backend:1.6.1
+
+# Append the Cangjie language definition to the end of languages.py.
+# The snippet references `default_env` and `languages`, both already defined
+# earlier in the stock file, so a plain append is valid Python.
+COPY cangjie/languages_cangjie.py /tmp/languages_cangjie.py
+RUN cat /tmp/languages_cangjie.py >> /app/judge/languages.py \
+    && rm -f /tmp/languages_cangjie.py \
+    && python3 -c "import ast; ast.parse(open('/app/judge/languages.py').read()); print('languages.py parses OK')"

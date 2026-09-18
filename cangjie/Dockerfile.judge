@@ -1,0 +1,32 @@
+# Custom judge image = stock QDU judge + Cangjie SDK 1.0.5 (cjnative)
+FROM registry.cn-hongkong.aliyuncs.com/oj-image/judge:1.6.1
+
+# Bring the whole Cangjie toolchain in from the verified upstream image.
+# Layout confirmed: cjc at /opt/cangjie/bin/cjc, runtime libs under
+# /opt/cangjie/runtime/lib/linux_x86_64_cjnative
+COPY --from=docker.io/zxilly/cangjie:latest /opt/cangjie /opt/cangjie
+
+# The upstream SDK ships as 0750 owned by uid 1001:users. The judge sandbox runs
+# the compiler as user `compiler` (901) and programs as `code`, neither of which
+# can traverse/execute those paths -> "Permission denied" surfacing as a compile
+# runtime error. Make the whole toolchain world-readable and dirs/binaries
+# world-executable.
+RUN chmod -R a+rX /opt/cangjie
+
+# Make cjc discoverable and its runtime libs loadable at both compile and run time.
+ENV CANGJIE_HOME=/opt/cangjie \
+    PATH=/opt/cangjie/bin:/opt/cangjie/tools/bin:$PATH \
+    LD_LIBRARY_PATH=/opt/cangjie/runtime/lib/linux_x86_64_cjnative:/opt/cangjie/tools/lib
+
+# Smoke-test the toolchain at build time so a broken image fails fast.
+RUN set -e; \
+    printf 'main() {\n    println(40 + 2)\n}\n' > /tmp/_cj_check.cj; \
+    /opt/cangjie/bin/cjc -O2 /tmp/_cj_check.cj -o /tmp/_cj_check; \
+    test "$(/tmp/_cj_check)" = "42"; \
+    rm -f /tmp/_cj_check /tmp/_cj_check.cj; \
+    echo "cangjie toolchain OK"
+
+# Replace entrypoint with one that also runs a recurring heartbeat so the judge
+# self-registers with the backend (stock image ships no scheduler).
+COPY cangjie/entrypoint.judge.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
